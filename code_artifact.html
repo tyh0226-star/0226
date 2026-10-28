@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>猜拳：星雲再起 · 科幻篇章對決</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #020617; /* slate-950 */
+            color: #f8fafc;
+            overflow-x: hidden;
+            user-select: none;
+        }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+
+        .cyber-glass {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Rarities */
+        .rarity-UR { border-color: #ef4444; box-shadow: 0 0 10px rgba(239,68,68,0.5); }
+        .rarity-SSR { border-color: #f59e0b; box-shadow: 0 0 10px rgba(245,158,11,0.5); }
+        .rarity-SR { border-color: #a855f7; box-shadow: 0 0 10px rgba(168,85,247,0.5); }
+        .rarity-R { border-color: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.4); }
+        .rarity-N { border-color: #64748b; }
+
+        .tag-UR { background: linear-gradient(135deg, #ef4444, #991b1b); color: #fff; text-shadow: 0 0 5px #fca5a5; }
+        .tag-SSR { background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; }
+        .tag-SR { background: linear-gradient(135deg, #a855f7, #6b21a8); color: #fff; }
+        .tag-R { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
+        .tag-N { background: #475569; color: #cbd5e1; }
+
+        .locked-item {
+            opacity: 0.6;
+            filter: grayscale(80%);
+            border-style: dashed;
+        }
+
+        /* Animations */
+        @keyframes clashLeft {
+            0% { transform: translateX(-150px) rotate(-20deg) scale(0.8); opacity: 0; }
+            50% { transform: translateX(10px) rotate(5deg) scale(1.1); opacity: 1; }
+            100% { transform: translateX(0) rotate(0deg) scale(1); opacity: 1; }
+        }
+        @keyframes clashRight {
+            0% { transform: translateX(150px) rotate(20deg) scale(0.8); opacity: 0; }
+            50% { transform: translateX(-10px) rotate(-5deg) scale(1.1); opacity: 1; }
+            100% { transform: translateX(0) rotate(0deg) scale(1); opacity: 1; }
+        }
+        @keyframes impactShake {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            10%, 90% { transform: translate3d(-4px, 4px, 0); }
+            20%, 80% { transform: translate3d(6px, -6px, 0); }
+            30%, 50%, 70% { transform: translate3d(-8px, 6px, 0); }
+            40%, 60% { transform: translate3d(8px, -6px, 0); }
+        }
+        .animate-clash-left { animation: clashLeft 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .animate-clash-right { animation: clashRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .screen-shake-impact { animation: impactShake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        ::-webkit-scrollbar-thumb { background: #0ea5e9; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative selection:bg-cyan-500 selection:text-slate-950">
+
+    <!-- FX Canvases -->
+    <canvas id="bgCanvas" class="fixed inset-0 pointer-events-none z-0 opacity-30"></canvas>
+    <canvas id="vfxCanvas" class="fixed inset-0 pointer-events-none z-50"></canvas>
+
+    <!-- Header -->
+    <header class="relative z-10 w-full px-4 py-3 border-b border-cyan-500/30 bg-slate-950/80 backdrop-blur-md flex flex-wrap justify-between items-center gap-3">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-900 flex items-center justify-center text-xl shadow-[0_0_15px_rgba(8,145,178,0.5)] border border-cyan-400">
+                🌌
+            </div>
+            <div>
+                <h1 class="text-lg md:text-xl font-bold font-orbitron bg-gradient-to-r from-cyan-400 to-indigo-400 bg-clip-text text-transparent">
+                    猜拳：星雲再起
+                </h1>
+                <div class="text-[10px] text-gray-400 flex gap-2">
+                    <span id="playerLevelDisplay">Lv.1 星際新兵</span>
+                    <span>|</span>
+                    <span class="text-yellow-400 font-bold"><i class="fa-solid fa-bolt text-yellow-500"></i> <span id="shardCount">0</span> 晶片</span>
+                </div>
+            </div>
+        </div>
+
+        <nav class="flex gap-2 text-xs font-bold">
+            <button onclick="switchTab('tabChapters')" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-cyan-300 transition-colors">
+                <i class="fa-solid fa-map"></i> 50大篇章
+            </button>
+            <button onclick="switchTab('tabSetup')" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-purple-300 transition-colors">
+                <i class="fa-solid fa-microchip"></i> 裝備解鎖
+            </button>
+            <button onclick="switchTab('tabCodex')" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-pink-300 transition-colors">
+                <i class="fa-solid fa-book"></i> 圖鑑
+            </button>
+            <button onclick="toggleMute()" class="px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-gray-300">
+                <i id="muteIcon" class="fa-solid fa-volume-high"></i>
+            </button>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="relative z-10 w-full max-w-6xl mx-auto p-4 flex-grow flex flex-col">
+        
+        <!-- ================= TAB: CAMPAIGN STAGES (50 Stages) ================= -->
+        <section id="tabChapters" class="flex-grow space-y-4">
+            <div class="cyber-glass rounded-2xl p-4 md:p-6">
+                <h2 class="text-xl font-orbitron font-bold text-cyan-400 mb-2 border-b border-cyan-900/50 pb-2">
+                    <i class="fa-solid fa-route"></i> 星際拓荒篇章 (Campaign)
+                </h2>
+                
+                <div class="flex gap-2 overflow-x-auto pb-2 mb-4" id="chapterNav"></div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" id="stageGrid"></div>
+            </div>
+        </section>
+
+        <!-- ================= TAB: EQUIPMENT UNLOCK & SETUP ================= -->
+        <section id="tabSetup" class="hidden flex-grow space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 h-[75vh]">
+                
+                <!-- Classes -->
+                <div class="cyber-glass rounded-2xl p-4 flex flex-col">
+                    <h2 class="text-lg font-orbitron font-bold text-indigo-400 mb-2 flex justify-between">
+                        <span><i class="fa-solid fa-user-astronaut"></i> 職業矩陣 (100)</span>
+                        <span class="text-xs text-yellow-400">目前裝備: <span id="eqClassTag" class="text-white">無</span></span>
+                    </h2>
+                    <div id="classList" class="flex-grow overflow-y-auto pr-2 grid grid-cols-1 gap-2"></div>
+                </div>
+
+                <!-- Weapons -->
+                <div class="cyber-glass rounded-2xl p-4 flex flex-col">
+                    <h2 class="text-lg font-orbitron font-bold text-pink-400 mb-2 flex justify-between">
+                        <span><i class="fa-solid fa-gun"></i> 神兵庫房 (100)</span>
+                        <span class="text-xs text-yellow-400">目前裝備: <span id="eqWeaponTag" class="text-white">無</span></span>
+                    </h2>
+                    <div id="weaponList" class="flex-grow overflow-y-auto pr-2 grid grid-cols-1 gap-2"></div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= TAB: CODEX ================= -->
+        <section id="tabCodex" class="hidden flex-grow space-y-4">
+            <div class="cyber-glass rounded-2xl p-6 text-center">
+                <h2 class="text-2xl font-orbitron font-bold text-emerald-400 mb-2">圖鑑與收集進度</h2>
+                <div class="flex justify-center gap-8 mb-6">
+                    <div>
+                        <div class="text-3xl font-bold text-indigo-300" id="codexClassProg">0/100</div>
+                        <div class="text-xs text-gray-400">已解鎖職業</div>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold text-pink-300" id="codexWeaponProg">0/100</div>
+                        <div class="text-xs text-gray-400">已解鎖神兵</div>
+                    </div>
+                    <div>
+                        <div class="text-3xl font-bold text-cyan-300" id="codexStageProg">0/50</div>
+                        <div class="text-xs text-gray-400">已通關卡</div>
+                    </div>
+                </div>
+                <button onclick="resetGame()" class="px-4 py-2 bg-red-900/50 text-red-200 border border-red-500 rounded hover:bg-red-800 text-xs transition">
+                    ⚠️ 刪除進度並重置遊戲
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= BATTLE ARENA ================= -->
+        <section id="tabBattle" class="hidden flex-grow flex flex-col justify-center max-w-4xl mx-auto w-full">
+            
+            <div class="flex justify-between items-end mb-4">
+                <button onclick="endBattle(true)" class="text-xs bg-slate-800 border border-slate-600 px-3 py-1 rounded text-gray-300 hover:text-white">
+                    <i class="fa-solid fa-arrow-left"></i> 撤退
+                </button>
+                <div class="text-center font-orbitron text-cyan-400 font-bold" id="battleStageTitle">Stage 1-1</div>
+                <div class="w-16"></div> <!-- Spacer -->
+            </div>
+
+            <!-- HUD Cards -->
+            <div class="grid grid-cols-3 gap-2 mb-4">
+                
+                <div class="cyber-glass rounded-xl p-3 text-center border-cyan-500/50 flex flex-col items-center">
+                    <div class="text-3xl mb-1" id="b_pIcon">👨‍🚀</div>
+                    <div class="text-[10px] text-cyan-300 font-bold truncate w-full" id="b_pClass">職業</div>
+                    <div class="text-[9px] text-gray-400 truncate w-full" id="b_pWeapon">武器</div>
+                    <div class="mt-2 text-2xl font-black text-emerald-400" id="b_pScore">0</div>
+                </div>
+
+                <div class="cyber-glass rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/80">
+                    <div class="text-xs text-gray-400 mb-1">目標勝場</div>
+                    <div class="text-3xl font-orbitron font-bold text-yellow-400" id="b_Target">3</div>
+                    <div class="text-[10px] text-gray-500 mt-1">率先達標者勝</div>
+                </div>
+
+                <div class="cyber-glass rounded-xl p-3 text-center border-red-500/50 flex flex-col items-center">
+                    <div class="text-3xl mb-1" id="b_eIcon">👾</div>
+                    <div class="text-[10px] text-red-300 font-bold truncate w-full" id="b_eName">Boss</div>
+                    <div class="text-[9px] text-gray-400 truncate w-full">防禦矩陣</div>
+                    <div class="mt-2 text-2xl font-black text-red-400" id="b_eScore">0</div>
+                </div>
+            </div>
+
+            <!-- Clash Arena -->
+            <div id="arenaBox" class="cyber-glass rounded-2xl h-48 md:h-64 border border-cyan-500/30 flex items-center justify-center relative overflow-hidden mb-4">
+                
+                <div class="flex items-center gap-6 md:gap-16 z-10">
+                    <div id="pChoice" class="w-20 h-20 md:w-28 md:h-28 rounded-2xl bg-slate-800 border-2 border-cyan-400/50 flex items-center justify-center text-4xl shadow-[0_0_20px_rgba(34,211,238,0.3)]">❓</div>
+                    <div class="text-2xl md:text-3xl font-orbitron font-black text-gray-500">VS</div>
+                    <div id="eChoice" class="w-20 h-20 md:w-28 md:h-28 rounded-2xl bg-slate-800 border-2 border-red-400/50 flex items-center justify-center text-4xl shadow-[0_0_20px_rgba(248,113,113,0.3)]">❓</div>
+                </div>
+
+            </div>
+
+            <!-- Inputs -->
+            <div class="grid grid-cols-3 gap-3">
+                <button onclick="playTurn('剪刀')" class="cyber-glass py-4 rounded-xl border border-slate-700 hover:border-cyan-400 flex flex-col items-center transition group">
+                    <span class="text-3xl group-hover:scale-110 transition">✌️</span>
+                    <span class="text-[10px] mt-1 text-cyan-200">等離子雙刃</span>
+                </button>
+                <button onclick="playTurn('石頭')" class="cyber-glass py-4 rounded-xl border border-slate-700 hover:border-orange-400 flex flex-col items-center transition group">
+                    <span class="text-3xl group-hover:scale-110 transition">✊</span>
+                    <span class="text-[10px] mt-1 text-orange-200">引力核爆破</span>
+                </button>
+                <button onclick="playTurn('布')" class="cyber-glass py-4 rounded-xl border border-slate-700 hover:border-emerald-400 flex flex-col items-center transition group">
+                    <span class="text-3xl group-hover:scale-110 transition">✋</span>
+                    <span class="text-[10px] mt-1 text-emerald-200">量子六角盾</span>
+                </button>
+            </div>
+            
+            <div id="battleLog" class="mt-4 cyber-glass rounded p-2 text-[10px] h-20 overflow-y-auto text-gray-400 border border-slate-800"></div>
+        </section>
+
+    </main>
+
+    <!-- Reward Modal -->
+    <div id="rewardModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur flex items-center justify-center hidden p-4">
+        <div class="cyber-glass border border-cyan-400 p-6 rounded-2xl max-w-sm w-full text-center">
+            <div class="text-5xl mb-2" id="rm_icon">🏆</div>
+            <h2 class="text-2xl font-orbitron font-bold text-cyan-300 mb-1" id="rm_title">戰役勝利</h2>
+            <p class="text-xs text-gray-300 mb-4" id="rm_sub">成功突破敵方防線！</p>
+            
+            <div class="bg-slate-900 rounded-xl p-3 mb-4 border border-slate-700">
+                <div class="text-yellow-400 font-bold text-lg">
+                    +<span id="rm_shards">0</span> ⚡ 閃電晶片
+                </div>
+            </div>
+
+            <button onclick="closeReward()" class="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg transition">
+                確認
+            </button>
+        </div>
+    </div>
+
+    <!-- Engine Logic -->
+    <script>
+        /* ================= PROCEDURAL DATA GENERATOR ================= */
+        const PREFIXES = ["量子", "等離子", "納米", "超新星", "反物質", "曲率", "暗影", "星際", "神經", "賽博"];
+        const CLASS_SUFFIXES = ["刺客", "騎士", "駭客", "狂戰士", "法師", "遊俠", "狙擊手", "領主", "醫官", "使徒"];
+        const WEAPON_SUFFIXES = ["光劍", "重砲", "毀滅錘", "狙擊槍", "護盾", "戰斧", "雙刃", "雷射槍", "毒弩", "粒子矛"];
+        const ICONS_C = ["🥷", "🛡️", "💻", "👹", "🔮", "🏹", "🎯", "👑", "🩺", "✨"];
+        const ICONS_W = ["🗡️", "💣", "🔨", "🔫", "🛡️", "🪓", "⚔️", "🔫", "🏹", "🔱"];
+
+        const RARITIES = [
+            { name: "UR", chance: 0.05, cost: 5000, color: "text-red-400" },
+            { name: "SSR", chance: 0.15, cost: 2000, color: "text-yellow-400" },
+            { name: "SR", chance: 0.30, cost: 800, color: "text-purple-400" },
+            { name: "R", chance: 0.30, cost: 300, color: "text-blue-400" },
+            { name: "N", chance: 0.20, cost: 100, color: "text-gray-400" }
+        ];
+
+        function assignRarity(index) {
+            if (index < 5) return RARITIES[0]; // UR
+            if (index < 20) return RARITIES[1]; // SSR
+            if (index < 50) return RARITIES[2]; // SR
+            if (index < 80) return RARITIES[3]; // R
+            return RARITIES[4]; // N
+        }
+
+        const CLASSES_DATA = [];
+        const WEAPONS_DATA = [];
+        let idCount = 0;
+        
+        for (let i = 0; i < 10; i++) {
+            for (let j = 0; j < 10; j++) {
+                let r = assignRarity(idCount);
+                CLASSES_DATA.push({
+                    id: `c_${idCount}`,
+                    name: PREFIXES[i] + CLASS_SUFFIXES[j],
+                    icon: ICONS_C[j],
+                    rarity: r.name,
+                    cost: r.cost
+                });
+                WEAPONS_DATA.push({
+                    id: `w_${idCount}`,
+                    name: PREFIXES[j] + WEAPON_SUFFIXES[i], // Mix it up
+                    icon: ICONS_W[i],
+                    rarity: r.name,
+                    cost: r.cost
+                });
+                idCount++;
+            }
+        }
+
+        /* Generate 50 Stages (10 Chapters x 5 Sectors) */
+        const STAGES_DATA = [];
+        const BOSS_NAMES = ["哨兵機甲", "星軌獵手", "虛空吞噬者", "矩陣暴君", "奇點主宰"];
+        const BOSS_ICONS = ["🤖", "👽", "👾", "👹", "🌌"];
+        
+        for (let ch = 1; ch <= 10; ch++) {
+            for (let sec = 1; sec <= 5; sec++) {
+                let sId = (ch - 1) * 5 + sec;
+                let isBoss = sec === 5;
+                STAGES_DATA.push({
+                    id: sId,
+                    chapter: ch,
+                    sector: sec,
+                    name: `Sector ${ch}-${sec}${isBoss ? ' [BOSS]' : ''}`,
+                    bossName: BOSS_NAMES[sec-1],
+                    bossIcon: BOSS_ICONS[sec-1],
+                    targetWins: 2 + ch + (isBoss ? 2 : 0), // Escalates with chapter
+                    reward: 50 + (ch * 20) + (isBoss ? 100 : 0)
+                });
+            }
+        }
+
+        /* ================= SAVE STATE & INITIALIZATION ================= */
+        let playerSave = null;
+        let activeTab = 'tabChapters';
+        let currentStageIdx = 0;
+        let currCh = 1;
+
+        function initGame() {
+            let saved = localStorage.getItem('scifi_rps_save_v7');
+            if (!saved) {
+                // TRUE ROGUELITE START: 1 Random Weapon, 1 Random Class
+                let startClass = CLASSES_DATA[Math.floor(Math.random() * CLASSES_DATA.length)];
+                let startWeapon = WEAPONS_DATA[Math.floor(Math.random() * WEAPONS_DATA.length)];
+                
+                playerSave = {
+                    shards: 500, // Starting shards
+                    clearedStages: [],
+                    unlockedClasses: [startClass.id],
+                    unlockedWeapons: [startWeapon.id],
+                    equippedClass: startClass.id,
+                    equippedWeapon: startWeapon.id
+                };
+                alert(`✨ 歡迎來到星雲紀元！\n\n系統已為您隨機配發初始武裝：\n【${startClass.rarity}】${startClass.name} \n【${startWeapon.rarity}】${startWeapon.name}\n\n擊敗敵人收集閃電晶片，解鎖更多科幻神兵吧！`);
+                saveGame();
+            } else {
+                playerSave = JSON.parse(saved);
+            }
+            updateUI();
+            renderChapterTabs();
+            renderStages(currCh);
+            renderSetup();
+        }
+
+        function saveGame() {
+            localStorage.setItem('scifi_rps_save_v7', JSON.stringify(playerSave));
+            updateUI();
+        }
+
+        function resetGame() {
+            if (confirm('警告：這將會清除所有進度並重新開始，確定嗎？')) {
+                localStorage.removeItem('scifi_rps_save_v7');
+                location.reload();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('shardCount').textContent = playerSave.shards;
+            let cData = CLASSES_DATA.find(c => c.id === playerSave.equippedClass);
+            let wData = WEAPONS_DATA.find(w => w.id === playerSave.equippedWeapon);
+            
+            if (cData) document.getElementById('eqClassTag').textContent = `[${cData.rarity}] ${cData.name}`;
+            if (wData) document.getElementById('eqWeaponTag').textContent = `[${wData.rarity}] ${wData.name}`;
+
+            document.getElementById('codexClassProg').textContent = `${playerSave.unlockedClasses.length}/100`;
+            document.getElementById('codexWeaponProg').textContent = `${playerSave.unlockedWeapons.length}/100`;
+            document.getElementById('codexStageProg').textContent = `${playerSave.clearedStages.length}/50`;
+        }
+
+        function switchTab(tabId) {
+            ['tabChapters', 'tabSetup', 'tabCodex', 'tabBattle'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(tabId).classList.remove('hidden');
+            if (tabId === 'tabSetup') renderSetup();
+        }
+
+        /* ================= CAMPAIGN RENDER ================= */
+        function renderChapterTabs() {
+            const nav = document.getElementById('chapterNav');
+            nav.innerHTML = '';
+            for(let i=1; i<=10; i++) {
+                let btn = document.createElement('button');
+                btn.className = `px-3 py-1 text-xs font-bold rounded shrink-0 border ${currCh === i ? 'bg-cyan-600 text-white border-cyan-400' : 'bg-slate-800 text-gray-400 border-slate-700'}`;
+                btn.textContent = `CH.${i}`;
+                btn.onclick = () => { currCh = i; renderChapterTabs(); renderStages(i); };
+                nav.appendChild(btn);
+            }
+        }
+
+        function renderStages(chapter) {
+            const grid = document.getElementById('stageGrid');
+            grid.innerHTML = '';
+            
+            let chStages = STAGES_DATA.filter(s => s.chapter === chapter);
+            chStages.forEach((stg, i) => {
+                let isCleared = playerSave.clearedStages.includes(stg.id);
+                // Unlock logic: Stage 1 is unlocked. Others unlocked if previous is cleared.
+                let prevId = stg.id - 1;
+                let isUnlocked = stg.id === 1 || playerSave.clearedStages.includes(prevId);
+
+                let card = document.createElement('div');
+                card.className = `p-4 rounded-xl border flex flex-col justify-between ${isUnlocked ? 'cyber-glass border-cyan-500/30' : 'bg-slate-900/50 border-slate-800 opacity-50 grayscale'}`;
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-2xl">${stg.bossIcon}</span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded ${isCleared ? 'bg-emerald-900 text-emerald-300 border border-emerald-500' : 'bg-slate-800 text-gray-400'}">${isCleared ? '⭐ 已通關' : '未通關'}</span>
+                        </div>
+                        <div class="font-bold text-sm text-cyan-100">${stg.name}</div>
+                        <div class="text-[10px] text-red-300">敵方: ${stg.bossName}</div>
+                        <div class="text-[10px] text-gray-400 mt-1">目標: ${stg.targetWins} 勝 | 獎勵: ${stg.reward}⚡</div>
+                    </div>
+                    <button ${!isUnlocked ? 'disabled' : ''} onclick="startBattle(${stg.id})" class="mt-3 w-full py-1.5 rounded text-xs font-bold transition ${isUnlocked ? 'bg-cyan-600 hover:bg-cyan-500 text-white' : 'bg-slate-700 text-gray-500'}">
+                        出擊 Deploy
+                    </button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        /* ================= SETUP / UNLOCK RENDER ================= */
+        function renderSetup() {
+            const cList = document.getElementById('classList');
+            const wList = document.getElementById('weaponList');
+            cList.innerHTML = ''; wList.innerHTML = '';
+
+            CLASSES_DATA.forEach(item => cList.appendChild(createItemCard(item, 'class')));
+            WEAPONS_DATA.forEach(item => wList.appendChild(createItemCard(item, 'weapon')));
+        }
+
+        function createItemCard(item, type) {
+            let isUnlocked = type === 'class' ? playerSave.unlockedClasses.includes(item.id) : playerSave.unlockedWeapons.includes(item.id);
+            let isEquipped = type === 'class' ? playerSave.equippedClass === item.id : playerSave.equippedWeapon === item.id;
+            
+            let div = document.createElement('div');
+            div.className = `p-2 rounded border flex items-center justify-between text-xs transition-colors ${isUnlocked ? (isEquipped ? 'bg-cyan-900/50 border-cyan-400' : 'bg-slate-800/80 border-slate-600 hover:bg-slate-700') : 'bg-slate-900 border-slate-800 locked-item'}`;
+            
+            div.innerHTML = `
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <span class="text-xl">${item.icon}</span>
+                    <div class="min-w-0">
+                        <div class="font-bold text-gray-200 truncate">${item.name}</div>
+                        <div class="text-[9px] tag-${item.rarity} inline-block px-1 rounded">${item.rarity}</div>
+                    </div>
+                </div>
+                <div>
+                    ${!isUnlocked ? `<button onclick="unlockItem('${item.id}', '${type}', ${item.cost})" class="px-2 py-1 bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 rounded whitespace-nowrap hover:bg-yellow-600/40">解鎖 ⚡${item.cost}</button>` : 
+                      (isEquipped ? `<span class="text-cyan-300 font-bold pr-2">裝備中</span>` : `<button onclick="equipItem('${item.id}', '${type}')" class="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600 whitespace-nowrap">裝備</button>`)}
+                </div>
+            `;
+            return div;
+        }
+
+        function unlockItem(id, type, cost) {
+            if (playerSave.shards < cost) { alert('閃電晶片不足！'); return; }
+            playerSave.shards -= cost;
+            if (type === 'class') playerSave.unlockedClasses.push(id);
+            else playerSave.unlockedWeapons.push(id);
+            playSound('laser');
+            saveGame();
+            renderSetup();
+        }
+
+        function equipItem(id, type) {
+            if (type === 'class') playerSave.equippedClass = id;
+            else playerSave.equippedWeapon = id;
+            playSound('shield');
+            saveGame();
+            renderSetup();
+        }
+
+        /* ================= BATTLE ENGINE ================= */
+        let bState = {
+            stage: null, pWins: 0, eWins: 0, isBusy: false
+        };
+        const emojis = { "剪刀": "✌️", "石頭": "✊", "布": "✋" };
+
+        function startBattle(stgId) {
+            bState.stage = STAGES_DATA.find(s => s.id === stgId);
+            bState.pWins = 0; bState.eWins = 0;
+            bState.isBusy = false;
+
+            document.getElementById('b_Target').textContent = bState.stage.targetWins;
+            document.getElementById('battleStageTitle').textContent = `CH.${bState.stage.chapter} - SEC.${bState.stage.sector}`;
+            
+            let cData = CLASSES_DATA.find(c => c.id === playerSave.equippedClass);
+            let wData = WEAPONS_DATA.find(w => w.id === playerSave.equippedWeapon);
+            
+            document.getElementById('b_pIcon').textContent = cData.icon;
+            document.getElementById('b_pClass').textContent = cData.name;
+            document.getElementById('b_pWeapon').textContent = wData.name;
+            
+            document.getElementById('b_eIcon').textContent = bState.stage.bossIcon;
+            document.getElementById('b_eName').textContent = bState.stage.bossName;
+            
+            updateBattleUI();
+            document.getElementById('battleLog').innerHTML = '';
+            logMsg(`進入 ${bState.stage.name}，與 ${bState.stage.bossName} 交戰！`);
+            switchTab('tabBattle');
+        }
+
+        function playTurn(pChoice) {
+            if (bState.isBusy) return;
+            bState.isBusy = true;
+
+            const opts = ["剪刀", "石頭", "布"];
+            const eChoice = opts[Math.floor(Math.random() * 3)];
+
+            let pBox = document.getElementById('pChoice');
+            let eBox = document.getElementById('eChoice');
+
+            pBox.textContent = emojis[pChoice];
+            eBox.textContent = emojis[eChoice];
+            
+            pBox.classList.remove('animate-clash-left');
+            eBox.classList.remove('animate-clash-right');
+            void pBox.offsetWidth; // trigger reflow
+            pBox.classList.add('animate-clash-left');
+            eBox.classList.add('animate-clash-right');
+
+            triggerVFX(pChoice);
+
+            setTimeout(() => {
+                evalTurn(pChoice, eChoice);
+                bState.isBusy = false;
+            }, 450);
+        }
+
+        function evalTurn(pChoice, eChoice) {
+            if (pChoice === eChoice) {
+                logMsg(`雙方出 ${pChoice}，能量抵銷！`);
+                playSound('shield');
+            } else if ((pChoice === "剪刀" && eChoice === "布") ||
+                       (pChoice === "石頭" && eChoice === "剪刀") ||
+                       (pChoice === "布" && eChoice === "石頭")) {
+                bState.pWins++;
+                logMsg(`你出 ${pChoice} 擊破 ${eChoice}！(得分)`);
+                playSound('victory'); // Small ping
+            } else {
+                bState.eWins++;
+                logMsg(`敵方 ${eChoice} 壓制了你的 ${pChoice}！(受擊)`);
+                playSound('boom');
+            }
+
+            updateBattleUI();
+
+            if (bState.pWins >= bState.stage.targetWins || bState.eWins >= bState.stage.targetWins) {
+                setTimeout(endBattle, 500);
+            }
+        }
+
+        function updateBattleUI() {
+            document.getElementById('b_pScore').textContent = bState.pWins;
+            document.getElementById('b_eScore').textContent = bState.eWins;
+        }
+
+        function logMsg(msg) {
+            let l = document.getElementById('battleLog');
+            l.innerHTML += `<div>> ${msg}</div>`;
+            l.scrollTop = l.scrollHeight;
+        }
+
+        function endBattle(forced = false) {
+            if (forced) { switchTab('tabChapters'); return; }
+            
+            if (bState.pWins >= bState.stage.targetWins) {
+                // Win
+                let sId = bState.stage.id;
+                if (!playerSave.clearedStages.includes(sId)) {
+                    playerSave.clearedStages.push(sId);
+                }
+                playerSave.shards += bState.stage.reward;
+                saveGame();
+                playSound('victory');
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                
+                document.getElementById('rm_icon').textContent = "🏆";
+                document.getElementById('rm_title').textContent = "戰役勝利";
+                document.getElementById('rm_shards').textContent = bState.stage.reward;
+                document.getElementById('rewardModal').classList.remove('hidden');
+            } else {
+                // Loss
+                playSound('boom');
+                document.getElementById('rm_icon').textContent = "💀";
+                document.getElementById('rm_title').textContent = "戰役失敗";
+                document.getElementById('rm_shards').textContent = "0";
+                document.getElementById('rewardModal').classList.remove('hidden');
+            }
+        }
+
+        function closeReward() {
+            document.getElementById('rewardModal').classList.add('hidden');
+            renderStages(currCh);
+            switchTab('tabChapters');
+        }
+
+        /* ================= VFX & AUDIO ================= */
+        function triggerVFX(type) {
+            const canvas = document.getElementById('vfxCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const cx = canvas.width / 2, cy = canvas.height / 2;
+
+            const arena = document.getElementById('arenaBox');
+            arena.classList.remove('screen-shake-impact');
+            void arena.offsetWidth;
+            if (type === '石頭') arena.classList.add('screen-shake-impact'); // Only rock shakes hard
+
+            let particles = [];
+            let start = performance.now();
+
+            if (type === '剪刀') {
+                playSound('laser');
+                for(let i=0; i<30; i++) particles.push({ x: cx, y: cy, vx: (Math.random()-0.5)*30, vy: (Math.random()-0.5)*30, size: Math.random()*3+1, c: '#06b6d4', life: 1 });
+            } else if (type === '石頭') {
+                playSound('boom');
+                for(let i=0; i<50; i++) particles.push({ x: cx, y: cy, vx: (Math.random()-0.5)*40, vy: (Math.random()-0.5)*40, size: Math.random()*6+2, c: '#f97316', life: 1 });
+            } else if (type === '布') {
+                playSound('shield');
+                for(let i=0; i<40; i++) particles.push({ x: cx, y: cy, vx: (Math.random()-0.5)*20, vy: (Math.random()-0.5)*20, size: Math.random()*4+1, c: '#10b981', life: 1 });
+            }
+
+            function draw(now) {
+                let el = now - start;
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                
+                // Draw custom shapes per type
+                ctx.save();
+                if (type === '剪刀' && el < 300) {
+                    ctx.strokeStyle = `rgba(6,182,212,${1 - el/300})`; ctx.lineWidth = 5;
+                    ctx.beginPath(); ctx.moveTo(cx-150, cy-150); ctx.lineTo(cx+150, cy+150); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx+150, cy-150); ctx.lineTo(cx-150, cy+150); ctx.stroke();
+                }
+                if (type === '布' && el < 400) {
+                    ctx.strokeStyle = `rgba(16,185,129,${1 - el/400})`; ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    for(let i=0; i<6; i++) {
+                        let a = i * Math.PI / 3;
+                        let r = el * 0.8;
+                        ctx[i===0?'moveTo':'lineTo'](cx + r*Math.cos(a), cy + r*Math.sin(a));
+                    }
+                    ctx.closePath(); ctx.stroke();
+                }
+                ctx.restore();
+
+                particles.forEach(p => {
+                    p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+                    if(p.life > 0) {
+                        ctx.fillStyle = p.c;
+                        ctx.globalAlpha = p.life;
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+                    }
+                });
+                
+                if (el < 500) requestAnimationFrame(draw);
+                else ctx.clearRect(0,0,canvas.width,canvas.height);
+            }
+            requestAnimationFrame(draw);
+        }
+
+        // Web Audio API
+        let actx = null, isMuted = false;
+        function toggleMute() {
+            isMuted = !isMuted;
+            document.getElementById('muteIcon').className = isMuted ? "fa-solid fa-volume-xmark" : "fa-solid fa-volume-high";
+        }
+        function playSound(type) {
+            if (isMuted) return;
+            if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+            if (actx.state === 'suspended') actx.resume();
+            let t = actx.currentTime;
+            let osc = actx.createOscillator();
+            let gain = actx.createGain();
+            osc.connect(gain); gain.connect(actx.destination);
+
+            if (type === 'laser') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(1000, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t+0.2);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t+0.2);
+                osc.start(t); osc.stop(t+0.2);
+            } else if (type === 'boom') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.exponentialRampToValueAtTime(20, t+0.4);
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.linearRampToValueAtTime(0.01, t+0.4);
+                osc.start(t); osc.stop(t+0.4);
+            } else if (type === 'shield') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, t);
+                osc.frequency.linearRampToValueAtTime(600, t+0.2);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0.01, t+0.2);
+                osc.start(t); osc.stop(t+0.2);
+            } else if (type === 'victory') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523, t);
+                osc.frequency.setValueAtTime(659, t+0.1);
+                osc.frequency.setValueAtTime(783, t+0.2);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0.01, t+0.4);
+                osc.start(t); osc.stop(t+0.4);
+            }
+        }
+
+        // Ambient bg
+        function runBg() {
+            const canvas = document.getElementById('bgCanvas');
+            const ctx = canvas.getContext('2d');
+            let w, h;
+            function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+            window.addEventListener('resize', resize);
+            resize();
+            
+            let pts = Array.from({length:30}, ()=>({x:Math.random()*w, y:Math.random()*h, v:Math.random()*0.5+0.2}));
+            function step() {
+                ctx.clearRect(0,0,w,h);
+                pts.forEach(p => {
+                    p.y -= p.v; if(p.y<0) p.y=h;
+                    ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+                    ctx.fillRect(p.x, p.y, 2, 2);
+                });
+                requestAnimationFrame(step);
+            }
+            step();
+        }
+
+        /* Init */
+        window.addEventListener('DOMContentLoaded', () => {
+            initGame();
+            runBg();
+        });
+    </script>
+</body>
+</html>
